@@ -1,0 +1,1 @@
+Requires: g++ with C++17 support and any Linux distro
