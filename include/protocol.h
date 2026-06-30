@@ -29,6 +29,14 @@ struct Message{
 
 };
 
+struct ReadMessage{
+    char magic[4];
+    uint64_t total_size;
+    uint32_t path_len;
+    uint32_t body_len;
+    Message msg;
+};
+
 
 // seperate check since message is a struct
 bool isValidMessage(const Message& msg){
@@ -39,7 +47,7 @@ bool isValidMessage(const Message& msg){
         return false;
     }
     return true;
-};
+}
 
 void writeU32BE(std::vector<char>& buf, uint32_t val){
     buf.push_back((val >> 24) & 0xFF);
@@ -125,81 +133,73 @@ void appendToFile(const std::vector<char>& buf, const std::string& path){
     fout.close();
 };
 
-struct ReadMessage {
-    int64_t total_size;
-    
-}
 
-std::vector<std::string> getRawBytes(const std::string& path){
+std::vector<ReadMessage> getRawBytes(const std::string& path){
     // gets raw bytes from a binary file and formats it
     std::ifstream fin;
     fin.open(path, std::ios::in | std::ios::binary);
     if (!fin) {
         std::cerr << "Error opening file for reading." << std::endl;
-        return "";
+        return {ReadMessage{}};
     }
-    std::vector<std::string> data;
+    std::vector<ReadMessage> data;
     int offset = 0;
     int length = 4;
     fin.seekg(0, std::ios::end);
-    std::streamsize size = file.tellg();
+    std::streamsize size = fin.tellg();
     fin.seekg(0, std::ios::beg);
     while (offset < size){
+        Message msg;
+
 
         //first check for possible corruption
-        std::string[4] buf;
-        file.read(buf, sizeof(buf));
-        if (buf != {'V', 'V', 'S', '2'}){
-            std::cerr < "Reading possibly corrupt data." << std::endl;
+        char buf[4];
+        fin.read(buf, sizeof(buf));
+        if (buf != "VVS2"){
+            std::cerr << "Reading possibly corrupt data." << std::endl;
         }
-        data.push_back(buf);
+        
+        ReadMessage curr_msg{};
 
-        // read total size prefix. int64_t -> 8 bytes
-        offset += length;
+        // read total size prefix. uint64_t -> 8 bytes
         length = 8;
-        int64_t total_size;
+        uint64_t total_size;
 
-        file.read(reinterpret_cast<char*> (&total_size), length);
-        data.push_back(total_size);
-        offset += length;
+        fin.read(reinterpret_cast<char*> (&total_size), length);
+        curr_msg.total_size = total_size;
         // prefix of path length is 4 bytes
         length = 4;
 
-        int32_t path_len;
-        file.read(reinterpret_cast<char*> (&path_len), path_len);
-        data.push_back(path_len);
-        offset += length;
+        uint32_t path_len;
+        fin.read(reinterpret_cast<char*> (&path_len), sizeof(path_len));
+        curr_msg.path_len = path_len;
 
-        std::string[path_len] path;
-        file.read(reinterpret_cast<char*> (&path), path_len);
-        offset += path_len;
-
+        char* path = new char[path_len];
+        fin.read(path, path_len);
+        msg.path = path;
+        delete[] path;
 
         // body length prefix (4 bytes)
 
-        data.push_back(path);
         int32_t body_len;
-        file.read(reinterpret_cast<char*> (&body_len), 4);
-        offset += 4;
-        data.push_back(body_len);
+        fin.read(reinterpret_cast<char*> (&body_len), 4);
+        curr_msg.body_len = body_len;
 
 
-        std::string[body_len] body;
-        file.read(reinterpret_cast<char*> (&body), body_len);
-        offset += body_len;
-        data.push_Back(body);
+        std::vector<char> body;
+        body.resize(body_len);
+        fin.read(reinterpret_cast<char*> (&body), body_len);
+        msg.body = body;
 
         // mtime
 
         int64_t time;
-        file.read(reinterpret_cast<char*> (time), 8);
-        offset += 8
-
+        fin.read(reinterpret_cast<char*> (&time), 8);
         data.push_back(time);
     }
     return data;
 
-};
+}
 
 
 std::vector<char> readU32LE(uint32_t val){
@@ -212,7 +212,7 @@ std::vector<char> readU32LE(uint32_t val){
 };
 
 std::vector<char> readU64BE(uint64_t val){
-    buf = std::vector<char>;
+    std::vector<char> buf;
     buf.push_back((val << 56) & 0xFF);
     buf.push_back((val << 48) & 0xFF);
     buf.push_back((val << 40) & 0xFF);
@@ -236,13 +236,13 @@ bool is_big_endian(void){
         char c[4];
     } bint = {0x01020304};
     return bint.c[0] = 1
-}
+};
 
 std::vector<std::string> deserialize(const std::vector<std::string>& bytes){
     std::vector<std::string> messages;
     bool isBig = is_big_endian();
 
-    for (int i = 0, i+5, i < bytes.size()){
+    for (int i = 0; i < bytes.size(); i += 5){
         messages.push_back(bytes[i]);
         if (isBig){
             messages.push_back(std::bitset<32> bits(readU32LE(bytes[i+1])))
