@@ -1,0 +1,5 @@
+this is some file that will be turned into bin and written in some place
+
+hello world!
+
+goodbye world!

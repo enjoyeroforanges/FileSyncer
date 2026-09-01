@@ -1,5 +1,5 @@
 #pragma once
-#include "C:\Users\iansh\OneDrive\Documents\GitHub\FileSyncer\vcpkg\installed\x64-mingw-dynamic\include\libssh\libssh.h"
+#include <libssh/libssh.h>
 #include <string>
 #include <iostream>
 #include <strings.h>
@@ -7,6 +7,9 @@
 
 #if defined(_WIN32)
 #include <windows.h>
+#undef FILE_CREATE
+#undef FILE_MODIFY
+#undef FILE_DELETE
 #else
 #include <termios.h>
 #include <unistd.h>
@@ -15,7 +18,6 @@
 
 
 inline int verifyKnownHost(ssh_session sesh){
-    std::cout << "something" << std::endl;
     size_t hlen;
     char *ans = NULL;
     unsigned char *hash = NULL;
@@ -170,7 +172,7 @@ inline int authenticatePassword(ssh_session sesh, const char* username){
 
 }
 
-inline int authenticatePublicKey(ssh_session sesh, ssh_key pubkey){
+inline int authenticatePublicKey(ssh_session sesh){
     int rc;
 
     rc = ssh_userauth_publickey_auto(sesh, NULL, NULL);
