@@ -1,1 +1,1 @@
-Requires: g++ with C++20 support and any Linux distro
+Requires: g++ with C++20 support
