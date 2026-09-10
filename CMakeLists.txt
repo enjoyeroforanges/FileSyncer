@@ -18,12 +18,13 @@ target_link_libraries(FileSyncer PRIVATE ssh xxHash::xxhash doctest::doctest)
 
 enable_testing()
 
-add_executable(test_ssh tests/test_ssh.cpp)
+add_executable(test_ssh tests/test_ssh.cpp src/ssh.cpp)
 target_include_directories(test_ssh PRIVATE include)
 target_link_libraries(test_ssh PRIVATE ssh)
 add_test(NAME test_ssh COMMAND test_ssh)
 
-add_executable(test_protocol tests/test_protocol.cpp)
+add_executable(test_protocol tests/test_protocol.cpp
+    src/protocol.cpp)
 target_include_directories(test_protocol PRIVATE include)
 target_link_libraries(test_protocol PRIVATE doctest::doctest xxHash::xxhash)
 add_test(NAME test_protocol COMMAND test_protocol)

@@ -71,6 +71,7 @@ std::unordered_map<uint32_t, std::pair<uint32_t, XXH128_hash_t>> sendHashes(std:
     // precondition: file is a opened file for reading with some stuff in it
     file.seekg(0, std::ios::end);
     std::streamsize file_size = file.tellg();
+    std::cout << "AFLJKDJHFDJKSDHF " + file_size << std::endl;
     file.seekg(0, std::ios::beg);
     
     size_t chunk_size;

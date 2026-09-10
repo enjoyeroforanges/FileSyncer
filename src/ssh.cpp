@@ -2,7 +2,9 @@
 #include <libssh/libssh.h>
 #include <string>
 #include <iostream>
-#include <strings.h>
+#include <cstring>
+#include <cstdlib>
+#include <filesystem>
 
 
 #if defined(_WIN32)
@@ -10,14 +12,16 @@
 #undef FILE_CREATE
 #undef FILE_MODIFY
 #undef FILE_DELETE
+
 #else
+
 #include <termios.h>
 #include <unistd.h>
 #endif
 
 
 
-inline int verifyKnownHost(ssh_session sesh) {
+int verifyKnownHost(ssh_session sesh) {
     size_t hlen;
     char* ans = NULL;
     unsigned char* hash = NULL;
@@ -123,7 +127,7 @@ inline int verifyKnownHost(ssh_session sesh) {
 
 }
 
-inline int authenticatePassword(ssh_session sesh, const char* username) {
+int authenticatePassword(ssh_session sesh, const char* username) {
     int rc;
     std::string password;
     char buf[10];
@@ -173,10 +177,9 @@ inline int authenticatePassword(ssh_session sesh, const char* username) {
 
 }
 
-inline int authenticatePublicKey(ssh_session sesh) {
+int authenticatePublicKey(ssh_session sesh) {
     int rc;
-
-    rc = ssh_userauth_publickey_auto(sesh, NULL, NULL);
+    rc = ssh_userauth_agent(sesh, NULL);
 
     if (rc == SSH_AUTH_ERROR) {
         fprintf(stderr, "Authentication failed %s \n", ssh_get_error(sesh));
@@ -187,7 +190,7 @@ inline int authenticatePublicKey(ssh_session sesh) {
     return rc;
 }
 
-inline ssh_session ConnectToHost(const char* host, const int* port, const char* username) {
+ssh_session ConnectToHost(const char* host, const int* port, const char* username) {
     ssh_session sesh = ssh_new();
     int verbosity = SSH_LOG_PROTOCOL;
     int rc;
@@ -217,7 +220,7 @@ inline ssh_session ConnectToHost(const char* host, const int* port, const char* 
     return sesh;
 }
 
-inline int RunCommand(const char* command, ssh_session sesh) {
+int RunCommand(const char* command, ssh_session sesh) {
     int rc;
     int bytes;
     ssh_channel channel;

@@ -17,12 +17,12 @@
 
 
 
-inline int verifyKnownHost(ssh_session sesh) {}
+int verifyKnownHost(ssh_session sesh);
 
-inline int authenticatePassword(ssh_session sesh, const char* username){}
+int authenticatePassword(ssh_session sesh, const char* username);
 
-inline int authenticatePublicKey(ssh_session sesh){}
+int authenticatePublicKey(ssh_session sesh);
 
-inline ssh_session ConnectToHost(const char* host, const int* port, const char* username){}
+ssh_session ConnectToHost(const char* host, const int* port, const char* username);
 
-inline int RunCommand(const char* command, ssh_session sesh){}
+int RunCommand(const char* command, ssh_session sesh);
