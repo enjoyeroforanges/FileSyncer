@@ -46,8 +46,6 @@ XXH128_hash_t hashChunk(const char *buf, const size_t len){
 
 int checkModifable(const std::string &path, const std::unordered_set<std::string> &modifableFiles){
     // Assumes that the Opcode of ReadMessage is FILE_MODIFY
-    
-    
     size_t pos = path.find(".");
     std::string_view extension = path;
     extension.remove_prefix(pos);
@@ -68,8 +66,6 @@ int filterChecksums(ssh_session sesh, const char* oldFile_path, const char* newF
     return 0;
 
 }
-
-
 
 std::unordered_map<uint32_t, std::pair<uint32_t, XXH128_hash_t>> sendHashes(std::fstream &file){
     // precondition: file is a opened file for reading with some stuff in it
