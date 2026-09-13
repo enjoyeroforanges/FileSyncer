@@ -178,8 +178,8 @@ int authenticatePassword(ssh_session sesh, const char* username) {
 }
 
 int authenticatePublicKey(ssh_session sesh) {
-    int rc;
-    rc = ssh_userauth_agent(sesh, NULL);
+    ssh_options_parse_config(sesh, nullptr);
+    int rc = ssh_userauth_publickey_auto(sesh, NULL, NULL);
 
     if (rc == SSH_AUTH_ERROR) {
         fprintf(stderr, "Authentication failed %s \n", ssh_get_error(sesh));

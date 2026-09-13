@@ -3,8 +3,9 @@
 
 
 int test_pubkeyauth(){
-    int host = 2200;
-    ssh_session sesh = ConnectToHost("localhost", &host, "goy");
+    int port = 2200;
+    // NOTE: "myserver" should be whatever the identity is in the config file
+    ssh_session sesh = ConnectToHost("myserver", &port, "root");
     if (verifyKnownHost(sesh) == SSH_OK){
         if (authenticatePublicKey(sesh) == SSH_OK){
             std::cout << "public key connection works" << std::endl;
@@ -14,9 +15,7 @@ int test_pubkeyauth(){
         }
         else{
             std::cout << "public key authentication failed"<<std::endl;
-
         }
-
     }
     else{
         std::cout << "could not establish connection" << std::endl;
