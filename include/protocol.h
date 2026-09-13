@@ -1,5 +1,4 @@
 // define message(sending stuff) struct and serialize/deserialize functions
-#pragma once
 #include <vector>
 #include <cstdint>
 #include <fstream>
@@ -13,6 +12,7 @@
 #include <cstdlib>
 #include <xxhash.h>
 #include <unordered_map>
+#include <concepts>
 
 using UnixNanos = int64_t;
 using Map = std::unordered_map<uint32_t, std::pair<uint32_t, XXH128_hash_t>>;
@@ -58,22 +58,20 @@ template <typename T>
 
 T toWireEndian(const T &val);
 
-
-namespace{
-    void writeToBuf(std::vector<char>& buf, const std::string &val){
-        for (int x = 0; x < val.size(); x++){
-            buf.push_back(val[x]);
-        }
-    }
-    template <typename N>
-
-    void writeToBuf(std::vector<char>& buf, const N &val){
-        for (size_t x = 0; x < sizeof(val); x++){
-            buf.push_back((val >> x * 8) & 0xFF);
-        }
-    }
-
+inline void writeToBuf(std::vector<char>& buf, const std::string_view &val){
+    buf.insert(buf.end(), val.begin(), val.end());
 }
+
+template <typename T>
+concept ByteSwappable = std::integral<T>;
+
+template <ByteSwappable N>
+void writeToBuf(std::vector<char>& buf, const N &val){
+    for (size_t x = 0; x < sizeof(val); x++){
+        buf.push_back((val >> x * 8) & 0xFF);
+    }
+}
+
 
 void writeBytes(std::vector<char>& buf, std::string_view val);
 
@@ -84,7 +82,6 @@ std::vector<char> serialize(const Map &map, const std::string path);
 void writeToFile(const std::vector<char>& buf, const std::string& path);
 
 void appendToFile(const std::vector<char>& buf, const std::string& path);
-
 
 int serializeFile(const std::filesystem::path path, Opcode op);
 

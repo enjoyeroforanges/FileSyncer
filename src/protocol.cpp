@@ -9,10 +9,7 @@
 #include <cstring>
 #include <string>
 #include <filesystem>
-#include <chrono>
-#include <cstdlib>
 #include <xxhash.h>
-#include <unordered_map>
 #include <protocol.h>
 
 static const char* user = 
@@ -52,9 +49,9 @@ T ByteSwap(const T &val){
     return newval;
 }
 
-
 template <typename T>
-
+// ---------------------------------------------------------------
+// TODO: add require or constraint to prevent byteswap trying to swap nonswappable val
 T toWireEndian(const T &val){
     return is_little_endian() ? ByteSwap(val) : val;
 }
