@@ -24,7 +24,7 @@ std::vector<std::string> checkNewFiles(const std::vector<std::string> files)
 	// checks if there was any new files added to be watched and adds them to 
 	// hash file
 	
-	std::ifstream file("../.filesyncer.json");
+	std::ifstream file("../.filesyncer.json", std::ios::binary);
 	json data = json::parse(file);
 	file.close();
 
@@ -34,12 +34,12 @@ std::vector<std::string> checkNewFiles(const std::vector<std::string> files)
 	for (auto& fname : files) {
 		// new file
 		if (data.find(fname) == data.end()) {
-			file.open(fname);
-
+			file.open(fname, std::ios::binary);
 			XXH64_hash_t hash = hashFile(file);
 			json entry = json::object({ {fname, hash} });
 			data.insert(entry.begin(), entry.end());
 			newFiles.push_back(fname);
+			file.close();
 		}
 	}
 
@@ -60,6 +60,7 @@ std::vector<std::string> checkChangedFiles() {
 		if (XXH64_hash_t hash = hashFile(file); hash != hashFile(file)) {
 			changedFiles.push_back(key);
 		}
+		file.close();
 	}
 	return changedFiles;
 }
