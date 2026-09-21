@@ -177,7 +177,7 @@ std::vector<std::pair<uint32_t, uint32_t>> filterChecksums(const char* oldFile_p
         // last entry will be checked later if it is last char of newFile, then chars after eof of newFile will be wiped
         replaceRanges.push_back(std::pair<uint32_t, uint32_t> {start, length - 1});
     }
-
+    newFile.close();
     return replaceRanges;
 
 }

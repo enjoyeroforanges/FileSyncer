@@ -59,7 +59,6 @@ TEST_CASE("test serialize hashes") {
 
     std::vector<char> bins = serialize(map, tmppath.string());
 
-    std::cout << "goy1" << std::endl;
 
     SUBCASE("check magic") {
         CHECK(bins[0] == 'V');
@@ -68,7 +67,6 @@ TEST_CASE("test serialize hashes") {
         CHECK(bins[3] == '2');
     }
     
-    std::cout << "goy2" << std::endl;
 
     SUBCASE("check total size"){
         uint64_t total_size;
@@ -81,12 +79,12 @@ TEST_CASE("test serialize hashes") {
         CHECK(total_size == 17 + (tmppath.string()).size() + (map.size() * 24));
     }
     
-    std::cout << "goy3" << std::endl;
+
     SUBCASE("check opcode") {
         CHECK(static_cast<Opcode>(bins[12]) == Opcode::FILE_HASHES);
     }
 
-    std::cout << "goy4" << std::endl;
+
     SUBCASE("check path size") {
         uint32_t path_len;
         std::memcpy(&path_len, bins.data() + 13, 4);
@@ -98,7 +96,7 @@ TEST_CASE("test serialize hashes") {
 
     int offset = (tmppath.string()).size() + 17;
 
-    std::cout << "goy5" << std::endl;
+
     SUBCASE("check body length"){
         uint64_t body_len;
         std::memcpy(&body_len, bins.data() + offset, 8);
@@ -107,7 +105,7 @@ TEST_CASE("test serialize hashes") {
     }
     offset += 8;
 
-    std::cout << "goy6" << std::endl;
+
     SUBCASE("check first key and value"){
         uint32_t key;
         uint32_t weak_hash;
@@ -128,7 +126,6 @@ TEST_CASE("test serialize hashes") {
         memcpy(&strong_hash_high, bins.data() + offset + 16, 8);
         strong_hash_high = is_little_endian() ? ByteSwap(strong_hash_high) : strong_hash_high;
         
-        std::cout << "goy17" << std::endl;
 
         strong_hash.low64 = strong_hash_low;
 
@@ -137,13 +134,12 @@ TEST_CASE("test serialize hashes") {
         auto iter = map.find(key);
         REQUIRE(iter != map.end());
 
-        std::cout << "goy20" << std::endl;
         auto g = iter->second;
-        std::cout << "goy30" << std::endl;
+
         CHECK(weak_hash == (map.find(key)->second).first);
-        std::cout << "goy21" << std::endl;
+
         CHECK(strong_hash.low64 == map.find(key)->second.second.low64);
-        std::cout << "goy22" << std::endl;
+
         CHECK(strong_hash.high64 == map.find(key)->second.second.high64);
     }
 
