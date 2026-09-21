@@ -12,9 +12,12 @@ find_package(zlib CONFIG REQUIRED)
 find_package(Threads REQUIRED)
 find_package(doctest REQUIRED)
 
-add_executable(FileSyncer src/main.cpp src/cli.cpp src/sync.cpp)
+find_package(nlohmann_json REQUIRED)
+
+add_executable(FileSyncer src/main.cpp src/cli.cpp src/sync.cpp src/watcher.cpp
+        include/watcher.h)
 target_include_directories(FileSyncer PRIVATE include)
-target_link_libraries(FileSyncer PRIVATE ssh xxHash::xxhash doctest::doctest)
+target_link_libraries(FileSyncer PRIVATE ssh xxHash::xxhash doctest::doctest nlohmann_json::nlohmann_json)
 
 enable_testing()
 
@@ -29,7 +32,7 @@ target_include_directories(test_protocol PRIVATE include)
 target_link_libraries(test_protocol PRIVATE doctest::doctest xxHash::xxhash)
 add_test(NAME test_protocol COMMAND test_protocol)
 
-add_executable(test_read tests/test_read.cpp)
+add_executable(test_read tests/test_read.cpp src/protocol.cpp)
 target_include_directories(test_read PRIVATE include)
 add_test(NAME test_read COMMAND test_read)
 
@@ -37,3 +40,8 @@ add_executable(test_sync tests/test_sync.cpp src/sync.cpp)
 target_include_directories(test_sync PRIVATE include)
 target_link_libraries(test_sync PRIVATE ssh xxHash::xxhash)
 add_test(NAME test_sync COMMAND test_sync)
+
+add_executable(test_watcher tests/test_watcher.cpp src/watcher.cpp)
+target_include_directories(test_watcher PRIVATE include)
+target_link_libraries(test_watcher PRIVATE xxHash::xxhash nlohmann_json::nlohmann_json)
+add_test(NAME test_watcher COMMAND test_watcher)
