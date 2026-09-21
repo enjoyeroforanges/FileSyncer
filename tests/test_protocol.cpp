@@ -92,8 +92,6 @@ TEST_CASE("test serialize hashes") {
         CHECK(path_len == (tmppath.string()).size());
     }
 
-    // TODO: check actual path
-
     int offset = (tmppath.string()).size() + 17;
 
 
@@ -112,8 +110,6 @@ TEST_CASE("test serialize hashes") {
         XXH128_hash_t strong_hash;
         XXH64_hash_t strong_hash_low;
         XXH64_hash_t strong_hash_high;
-
-        // TODO: key is not being read properly, weak_hash probably not as well
 
         memcpy(&key, bins.data() + offset, 4);
         key = is_little_endian() ? ByteSwap(key) : key;
