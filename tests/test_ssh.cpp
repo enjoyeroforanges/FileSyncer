@@ -1,5 +1,7 @@
 #include "../include/ssh.h"
+#include <fstream>
 #include <stdio.h>
+#include <vector>
 
 
 int test_pubkeyauth(){
@@ -13,9 +15,6 @@ int test_pubkeyauth(){
             ssh_free(sesh);
             return 0;
         }
-        else{
-            std::cout << "public key authentication failed"<<std::endl;
-        }
     }
     else{
         std::cout << "could not establish connection" << std::endl;
@@ -25,13 +24,48 @@ int test_pubkeyauth(){
     return -1;
 }
 
-int create_file_with_stuff(){
-    
+int test_sftpSendFile(ssh_session sesh, std::string filename, std::string dest) {
+    int rc;
+    std::ifstream file(filename.c_str(), std::ios::binary);
+    if (!file.is_open()) {
+        fprintf(stderr, "failed to open %s\n", filename.c_str());
+        return SSH_ERROR;
+    }
+    file.seekg(0, std::ios::end);
+    size_t length= file.tellg();
+    file.seekg(0, std::ios::beg);
+
+    std::vector<char> buffer(length);
+    file.read(buffer.data(), length);
+    file.close();
+    rc = sftpSendFile(sesh, buffer.data(), length, dest.c_str());
+    if (rc != SSH_OK) {
+        std::cout << "sftpSendFile failed" << std::endl;
+    }
+    return rc;
 }
 
-int main(){
-    int host = 2200;
-    ssh_session sesh = ConnectToHost("localhost", &host, "goy");
+int main(int argc, char *argv[]){
+    int port = 2200;
+    int rc;
+    std::cout << argv[1] << '\n';
+
+    if (argc > 1 && std::string_view(argv[1]) == "filetransfer") {
+        // only use when pubkeyauth works
+        ssh_session sesh = ConnectToHost("myserver", &port, "root");
+        rc = authenticatePublicKey(sesh);
+        if (rc != SSH_OK) {
+            fprintf(stderr, "failed to authenticate public key");
+        }
+        rc = test_sftpSendFile(sesh, "../tests/test_ssh_files/payload1", "payloads/payload1");
+        ssh_disconnect(sesh);
+        ssh_free(sesh);
+        if (rc != SSH_OK) {
+            fprintf(stderr, "sftpSendFile failed");
+            return rc;
+        }
+    }
+    ssh_session sesh = ConnectToHost("localhost", &port, "goy");
     if (verifyKnownHost(sesh) == 0){
         if (authenticatePassword(sesh, "goy") == 0){
             std::cout << "connection good" << std::endl;
@@ -45,7 +79,6 @@ int main(){
     }
     
     ssh_channel channel;
-    int rc;
 
     channel = ssh_channel_new(sesh);
     if (channel == NULL) return SSH_ERROR;
@@ -54,19 +87,11 @@ int main(){
         ssh_channel_free(channel);
         return rc;
     }
-    rc = ssh_channel_request_exec(channel, "mkdir something");
-    ssh_channel_free(channel);
-    if (rc != SSH_OK){
-        std::cout << "error trying to exec command" << std::endl;
-    }
-    else{
-        std::cout << "dir created" << std::endl;
-    }
     rc = RunCommand("ls", sesh);
     if (rc != SSH_OK){
         std::cout << "error trying to exec command" << std::endl;
     }
-
+    rc = test_sftpSendFile(sesh, "/test_ssh_files/payload1", "/payloads/payload1");
     ssh_disconnect(sesh);
     ssh_free(sesh);
 

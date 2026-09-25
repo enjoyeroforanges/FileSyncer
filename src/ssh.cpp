@@ -1,11 +1,25 @@
-#pragma once
 #include <libssh/libssh.h>
 #include <string>
 #include <iostream>
 #include <cstring>
 #include <cstdlib>
 #include <filesystem>
+#include <libssh/sftp.h>
+#include <fcntl.h>
+#include <fcntl.h>
+#include <span>
+#include <sys/stat.h>
 
+#ifndef S_IRWXU
+#  if defined(_WIN32) || defined(_WIN64)
+#    include <io.h>
+#    include <fcntl.h>
+#    define S_IRWXU (_S_IREAD | _S_IWRITE | _S_IEXEC)
+#  else
+#    /* fallback if some platform didn't define it */
+#    define S_IRWXU (S_IRUSR | S_IWUSR | S_IXUSR)
+#  endif
+#endif
 
 #if defined(_WIN32)
 #include <windows.h>
@@ -107,7 +121,7 @@ int verifyKnownHost(ssh_session sesh) {
             return -1;
         }
         else if (*ans == 'Y') {
-            return -1;
+            break;
         }
 
         rc = ssh_session_update_known_hosts(sesh);
@@ -149,7 +163,7 @@ int authenticatePassword(ssh_session sesh, const char* username) {
 
 
 #else
-    termios odlt;
+    termios odt;
     tcgetattr(STDIN_FILENO, &oldt);
     termios newt = oldt;
 
@@ -213,8 +227,9 @@ ssh_session ConnectToHost(const char* host, const int* port, const char* usernam
     }
     std::cout << "SSH OK" << std::endl;
     if (verifyKnownHost(sesh) != 0) {
+        ssh_disconnect(sesh);
         ssh_free(sesh);
-        return sesh;
+        exit(-1);
     }
 
     return sesh;
@@ -243,4 +258,51 @@ int RunCommand(const char* command, ssh_session sesh) {
 
     return rc;
 
+}
+// FIX LATER
+int sftpSendFile(ssh_session sesh, const char* contents, const size_t length, const char* destination) {
+    sftp_session sftp = sftp_new(sesh);
+    int access_type = O_WRONLY | O_CREAT | O_TRUNC;
+    int rc;
+    sftp_file file;
+    ssize_t request_bytes;
+    ssize_t writtenlen;
+    sftp_limits_t lim;
+    size_t chunk;
+    sftp_init(sftp);
+    std::span<const char> content_view(contents, length);
+    if (sftp == NULL)
+    {
+        printf("Error connecting to host");
+        return SSH_ERROR;
+    }
+    lim = sftp_limits(sftp);
+    file = sftp_open(sftp, destination, access_type, S_IRWXU);
+    
+    if (file == NULL) {
+        printf("Error opening file for writing on host. Error: %s.\n", ssh_get_error(sesh));
+        return SSH_ERROR;
+    }
+    chunk = lim ? lim->max_write_length : 32768;
+    sftp_limits_free(lim);
+    for (size_t x = 0; x < length; x += chunk) {
+        if (x + chunk >= length) {
+            // avoid sending garbage (buffer overflow)
+            request_bytes = sftp_write(file, content_view.data() + x, content_view.size() - x);
+        }
+        else {
+            request_bytes = sftp_write(file, content_view.data() + x, chunk);
+        }
+        if (request_bytes < 0) {
+            fprintf(stderr, "Error trying to write to file. Error: %s.\n", ssh_get_error(sesh));
+            return SSH_ERROR;
+        }
+    }
+    rc = sftp_close(file);
+    if (rc != SSH_OK) {
+        printf("Can't close written file.");
+        return rc;
+    }
+
+    return SSH_OK;
 }
