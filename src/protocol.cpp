@@ -158,21 +158,14 @@ int serializeFile(const std::filesystem::path path, Opcode op){
     msg.opcode = op;
     msg.path = path.string();
     
-    std::ifstream file(path);
+    std::ifstream file(path, std::ios::in | std::ios::binary);
     if (!file.is_open()) return -1;
 
     file.seekg(0, std::ios::end);
     body.resize(file.tellg());
     file.seekg(0, std::ios::beg);
 
-    while (true){
-        char let;
-        file.read(&let, 1);
-        body.push_back(let);
-        if (file.eof()){
-            break;
-        }
-    }
+    file.read(body.data(), body.size());
 
     msg.body = body;
 
