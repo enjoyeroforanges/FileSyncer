@@ -62,8 +62,8 @@ int main(int argc, char *argv[]){
         ssh_free(sesh);
         if (rc != SSH_OK) {
             fprintf(stderr, "sftpSendFile failed");
-            return rc;
         }
+        return rc;
     }
     ssh_session sesh = ConnectToHost("localhost", &port, "goy");
     if (verifyKnownHost(sesh) == 0){
