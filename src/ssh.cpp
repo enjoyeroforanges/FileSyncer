@@ -259,7 +259,6 @@ int RunCommand(const char* command, ssh_session sesh) {
     return rc;
 
 }
-// FIX LATER
 int sftpSendFile(ssh_session sesh, const char* contents, const size_t length, const char* destination) {
     sftp_session sftp = sftp_new(sesh);
     int access_type = O_WRONLY | O_CREAT | O_TRUNC;
