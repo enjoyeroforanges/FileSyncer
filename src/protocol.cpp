@@ -1,5 +1,3 @@
-// define message(sending stuff) struct and serialize/deserialize functions
-#pragma once
 #include <vector>
 #include <cstdint>
 #include <fstream>
@@ -163,9 +161,9 @@ int serializeFile(const std::filesystem::path path, Opcode op){
     std::ifstream file(path);
     if (!file.is_open()) return -1;
 
-    file.seekg(std::ios::end);
+    file.seekg(0, std::ios::end);
     body.resize(file.tellg());
-    file.seekg(std::ios::beg);
+    file.seekg(0, std::ios::beg);
 
     while (true){
         char let;
