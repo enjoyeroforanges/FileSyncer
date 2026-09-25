@@ -105,6 +105,7 @@ std::vector<char> serialize(const Message& msg){
 std::vector<char> serialize(const Map &map, const std::string path){
     // for sending hashes
     std::vector<char> buffer;
+    UnixNanos mtime = nowUnixNanos();
     buffer.push_back('V');
     buffer.push_back('V');
     buffer.push_back('S');
@@ -119,7 +120,7 @@ std::vector<char> serialize(const Map &map, const std::string path){
     writeToBuf(buffer, toWireEndian(static_cast<uint8_t>(Opcode::FILE_HASHES)));
     writeToBuf(buffer, toWireEndian(static_cast<uint32_t>(path.size())));
     writeToBuf(buffer, path);
-    writeToBuf(buffer, toWireEndian(static_cast<uint64_t>(map.size() * 24)));
+    writeToBuf(buffer, toWireEndian((map.size() * 24)));
 
     for (const auto& [key, value]: map){
         writeToBuf(buffer, toWireEndian(key));
@@ -181,7 +182,9 @@ std::string opcode_to_string(const Opcode opcode){
         case Opcode::FILE_CREATE: return "FILE_CREATE";
         case Opcode::FILE_MODIFY: return "FILE_MODIFY";
         case Opcode::FILE_DELETE: return "FILE_DELETE";
+        case Opcode::FILE_HASHES: return "FILE_HASHES";
     }
+    return "UNKNOWN";
 }
 
 std::vector<ReadMessage> getRawBytes(const std::string& path){

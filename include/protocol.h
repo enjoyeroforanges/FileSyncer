@@ -1,4 +1,4 @@
-// define message(sending stuff) struct and serialize/deserialize functions
+#pragma once
 #include <vector>
 #include <cstdint>
 #include <fstream>
@@ -14,8 +14,15 @@
 #include <unordered_map>
 #include <concepts>
 
+
 using UnixNanos = int64_t;
-using Map = std::unordered_map<uint32_t, std::pair<uint32_t, XXH128_hash_t>>;
+
+// current wall-clock time as nanoseconds since the unix epoch
+inline UnixNanos nowUnixNanos() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+using Map = std::unordered_multimap<uint32_t, std::pair<uint32_t, XXH128_hash_t>>;
 
 enum class Opcode : uint8_t{
     FILE_CREATE = 0x01,
