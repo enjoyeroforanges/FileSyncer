@@ -303,6 +303,7 @@ int sftpSendFile(ssh_session sesh, const char* contents, const size_t length, co
         printf("Can't close written file.");
         return rc;
     }
+    sftp_free(sftp);
 
     return SSH_OK;
 }
