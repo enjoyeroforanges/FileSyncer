@@ -90,7 +90,7 @@ void writeToFile(const std::vector<char>& buf, const std::string& path);
 
 void appendToFile(const std::vector<char>& buf, const std::string& path);
 
-int serializeFile(const std::filesystem::path path, Opcode op);
+std::string serializeFile(const std::filesystem::path path, Opcode op);
 
 std::string opcode_to_string(const Opcode opcode);
 
