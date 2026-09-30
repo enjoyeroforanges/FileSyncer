@@ -1,4 +1,4 @@
-// define message(sending stuff) struct and serialize/deserialize functions
+#pragma once
 #include <vector>
 #include <cstdint>
 #include <fstream>
@@ -14,14 +14,21 @@
 #include <unordered_map>
 #include <concepts>
 
-using UnixNanos = int64_t;
-using Map = std::unordered_map<uint32_t, std::pair<uint32_t, XXH128_hash_t>>;
 
-enum class Opcode : uint8_t{
+using UnixNanos = int64_t;
+
+// current wall-clock time as nanoseconds since the unix epoch
+inline UnixNanos nowUnixNanos() {
+    return std::chrono::duration_cast<std::chrono::nanoseconds>(
+        std::chrono::system_clock::now().time_since_epoch()).count();
+}
+using Map = std::unordered_multimap<uint32_t, std::pair<uint32_t, XXH128_hash_t>>;
+
+enum struct Opcode: uint8_t {
     FILE_CREATE = 0x01,
     FILE_MODIFY = 0x02,
     FILE_DELETE = 0x03,
-    FILE_HASHES = 0x04,   // to distinguish files meant for hash comparisons from modifications
+    FILE_HASHES = 0x04 // to distinguish files meant for hash comparisons from modifications
 };
 
 
@@ -83,7 +90,7 @@ void writeToFile(const std::vector<char>& buf, const std::string& path);
 
 void appendToFile(const std::vector<char>& buf, const std::string& path);
 
-int serializeFile(const std::filesystem::path path, Opcode op);
+std::string serializeFile(const std::filesystem::path path, Opcode op);
 
 std::string opcode_to_string(const Opcode opcode);
 
