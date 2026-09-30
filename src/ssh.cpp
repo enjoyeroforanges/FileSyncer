@@ -9,6 +9,8 @@
 #include <fcntl.h>
 #include <span>
 #include <sys/stat.h>
+#include <vector>
+#include <fstream>
 
 #ifndef S_IRWXU
 #  if defined(_WIN32) || defined(_WIN64)
@@ -33,7 +35,7 @@
 #include <unistd.h>
 #endif
 
-
+#define LOG(x) (std::cerr << x << '\n')
 
 int verifyKnownHost(ssh_session sesh) {
     size_t hlen;
@@ -44,7 +46,6 @@ int verifyKnownHost(ssh_session sesh) {
     int rc;
     int cmp;
     ssh_key srv_pubkey = NULL;
-
 
     rc = ssh_get_server_publickey(sesh, &srv_pubkey);
     if (rc < 0) {
@@ -62,79 +63,85 @@ int verifyKnownHost(ssh_session sesh) {
 
     ssh_key_free(srv_pubkey);
 
-
+    char* hash_str = ssh_get_fingerprint_hash(SSH_PUBLICKEY_HASH_SHA256, hash, hlen);
     switch (ssh_session_is_known_server(sesh)) {
-    case (SSH_KNOWN_HOSTS_OK):
-        // * OK *
-        break;
-    case (SSH_KNOWN_HOSTS_CHANGED):
-        fprintf(stderr,
-            "WARNING: Host server's key has been changed, if this was not intentional"
-            ", you may be under attack.\n");
-        fprintf(stderr, "Public key hash: ");
-        ssh_print_hash(SSH_PUBLICKEY_HASH_SHA256, hash, hlen);
-        fprintf(stderr, "For security, the connection will be stopped");
-        ssh_clean_pubkey_hash(&hash);
-        return -1;
-        /*
-        fprintf(stderr, "Continue to connect? (Y/N)\n");
-        std::cin >> ans;
-        if (ans == "Y"){
-            rc = ssh_session_update_known_hosts(sesh);
-            if (rc < 0){
-                fprintf(stderr, "Error %s\n", strerror(errno));
+        case (SSH_KNOWN_HOSTS_OK):
+            // * OK *
+            ssh_string_free_char(hash_str);
+            break;
+        case (SSH_KNOWN_HOSTS_CHANGED):
+            fprintf(stderr,
+                "WARNING: Host server's key has been changed, if this was not intentional"
+                ", you may be under attack.\n");
+
+            LOG("Public key hash: " << hash_str);
+            LOG("For security, the connection will be stopped");
+            ssh_clean_pubkey_hash(&hash);
+            ssh_string_free_char(hash_str);
+            return -1;
+
+            /*
+            fprintf(stderr, "Continue to connect? (Y/N)\n");
+            std::cin >> ans;
+            if (ans == "Y"){
+                rc = ssh_session_update_known_hosts(sesh);
+                if (rc < 0){
+                    fprintf(stderr, "Error %s\n", strerror(errno));
+                    return -1;
+                }
+            }
+            else if (ans == "N"){
+                exit(-1);
+                ssh_free(sesh);
+                ssh_clean_pubkey_hash(&hash);
+                return 0;
+            }
+            else{
+                fprintf(stderr, "Unknown input");
+                ssh_clean_pubkey_hash(&hash);
                 return -1;
             }
-        }
-        else if (ans == "N"){
-            exit(-1);
-            ssh_free(sesh);
-            ssh_clean_pubkey_hash(&hash);
-            return 0;
-        }
-        else{
-            fprintf(stderr, "Unknown input");
-            ssh_clean_pubkey_hash(&hash);
-            return -1;
-        }
-        break;
-        */
-
-    case (SSH_KNOWN_HOSTS_OTHER):
-        fprintf(stderr, "The host key for this server was not found but a different type of key was found.");
-        fprintf(stderr, "Warning, an attacker may have changed the server key to make the client think"
-            " there is no key");
-        ssh_clean_pubkey_hash(&hash);
-        return -1;
-
-    case (SSH_KNOWN_HOSTS_NOT_FOUND):
-        fprintf(stderr, "Could not find host file.\n");
-        fprintf(stderr, "If you wish to accept the host key, the host file will be created automatically.");
-
-
-    case (SSH_KNOWN_HOSTS_UNKNOWN):
-        fprintf(stdout, "The server is unknown, do you trust the server?(Y/N)\n");
-        fprintf(stdout, "Public key hash:");
-        ssh_print_hash(SSH_PUBLICKEY_HASH_SHA256, hash, hlen);
-        ans = fgets(buf, sizeof(buf), stdin);
-        if (ans == NULL) {
-            return -1;
-        }
-        else if (*ans == 'Y') {
             break;
-        }
+            */
 
-        rc = ssh_session_update_known_hosts(sesh);
-        if (rc < 0) {
-            fprintf(stdout, "Error %s\n", strerror(errno));
+        case (SSH_KNOWN_HOSTS_OTHER):
+            fprintf(stderr, "The host key for this server was not found but a different type of key was found.");
+            fprintf(stderr, "Warning, an attacker may have changed the server key to make the client think"
+                " there is no key");
+            ssh_clean_pubkey_hash(&hash);
+            ssh_string_free_char(hash_str);
             return -1;
-        }
 
-        break;
-    case (SSH_KNOWN_HOSTS_ERROR):
-        fprintf(stderr, "Error %s", strerror(errno));
-        ssh_clean_pubkey_hash(&hash);
-        return -1;
+        case (SSH_KNOWN_HOSTS_NOT_FOUND):
+            fprintf(stderr, "Could not find host file.\n");
+            fprintf(stderr, "If you wish to accept the host key, the host file will be created automatically.");
+            ssh_string_free_char(hash_str);
+
+        case (SSH_KNOWN_HOSTS_UNKNOWN):
+            fprintf(stderr, "The server is unknown, do you trust the server?(Y/N)\n");
+            fprintf(stderr, "Public key hash:");
+            ssh_string_free_char(hash_str);
+            ans = fgets(buf, sizeof(buf), stdin);
+            if (ans == NULL) {
+                return -1;
+            }
+            else if (*ans == 'Y') {
+                break;
+            }
+
+            rc = ssh_session_update_known_hosts(sesh);
+            if (rc < 0) {
+                fprintf(stderr, "Error %s\n", strerror(errno));
+                ssh_string_free_char(hash_str);
+                return -1;
+            }
+
+            break;
+        case (SSH_KNOWN_HOSTS_ERROR):
+            fprintf(stderr, "Error %s", strerror(errno));
+            ssh_string_free_char(hash_str);
+            ssh_clean_pubkey_hash(&hash);
+            return -1;
     }
     ssh_clean_pubkey_hash(&hash);
     return 0;
@@ -146,7 +153,7 @@ int authenticatePassword(ssh_session sesh, const char* username) {
     std::string password;
     char buf[10];
 
-    fprintf(stderr, "Enter your password:");
+    LOG("Enter your password");
 
 #if defined _WIN32
     HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
@@ -225,7 +232,7 @@ ssh_session ConnectToHost(const char* host, const int* port, const char* usernam
         exit(-1);
         ssh_disconnect(sesh);
     }
-    std::cout << "SSH OK" << std::endl;
+    std::cerr << "SSH OK" << std::endl;
     if (verifyKnownHost(sesh) != 0) {
         ssh_disconnect(sesh);
         ssh_free(sesh);
@@ -235,29 +242,28 @@ ssh_session ConnectToHost(const char* host, const int* port, const char* usernam
     return sesh;
 }
 
-int RunCommand(const char* command, ssh_session sesh) {
+std::string RunCommand(const char* command, ssh_session sesh) {
     int rc;
     int bytes;
     ssh_channel channel;
 
     channel = ssh_channel_new(sesh);
-    if (channel == NULL) return SSH_ERROR;
+    if (channel == NULL) return "";
     rc = ssh_channel_open_session(channel);
 
     rc = ssh_channel_request_exec(channel, command);
 
-    if (rc != SSH_OK) return -1;
+    if (rc != SSH_OK) return "";
     char buf[1024];
 
     bytes = ssh_channel_read(channel, buf, sizeof(buf) - 1, 0);
-    if (bytes > 0) { buf[bytes] = '\0'; printf("%s", buf); }
+    if (bytes > 0) buf[bytes] = '\0';
 
     ssh_channel_close(channel);
     ssh_channel_send_eof(channel);
     ssh_channel_free(channel);
 
-    return rc;
-
+    return buf;
 }
 int sftpSendFile(ssh_session sesh, const char* contents, const size_t length, const char* destination) {
     sftp_session sftp = sftp_new(sesh);
@@ -272,14 +278,14 @@ int sftpSendFile(ssh_session sesh, const char* contents, const size_t length, co
     std::span<const char> content_view(contents, length);
     if (sftp == NULL)
     {
-        printf("Error connecting to host");
+        LOG("Error connecting to host");
         return SSH_ERROR;
     }
     lim = sftp_limits(sftp);
     file = sftp_open(sftp, destination, access_type, S_IRWXU);
     
     if (file == NULL) {
-        printf("Error opening file for writing on host. Error: %s.\n", ssh_get_error(sesh));
+        fprintf(stderr, "Error opening file for writing on host. Error: %s.\n", ssh_get_error(sesh));
         return SSH_ERROR;
     }
     chunk = lim ? lim->max_write_length : 32768;
@@ -299,10 +305,23 @@ int sftpSendFile(ssh_session sesh, const char* contents, const size_t length, co
     }
     rc = sftp_close(file);
     if (rc != SSH_OK) {
-        printf("Can't close written file.");
+        fprintf(stderr, "Cannot close file. Error: %s.\n", ssh_get_error(sesh));
         return rc;
     }
     sftp_free(sftp);
 
     return SSH_OK;
+}
+
+
+int sftpSendFile(ssh_session sesh, const char* path, const char* destination) {
+    std::vector<char> buf;
+    std::ifstream file(path, std::ios::binary);
+    file.seekg(0, std::ios::end);
+    const size_t length = file.tellg();
+    file.seekg(0, std::ios::beg);
+    buf.resize(length);
+    file.read(buf.data(), length);
+    file.close();
+    return sftpSendFile(sesh, buf.data(), length, destination);
 }

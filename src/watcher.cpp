@@ -19,10 +19,9 @@ XXH64_hash_t hashFile(std::ifstream &file) {
 	return hash;
 }
 
-std::vector<std::string> checkNewFiles(const std::vector<std::string> files)
-{
+std::vector<std::string> checkNewFiles(const std::vector<std::string> files){
 	// checks if there was any new files added to be watched and adds them to 
-	// hash file
+	// manifest
 	
 	std::ifstream file("../.filesyncer.json", std::ios::binary);
 	json data = json::parse(file);
@@ -42,22 +41,49 @@ std::vector<std::string> checkNewFiles(const std::vector<std::string> files)
 			file.close();
 		}
 	}
-
-	std::ofstream out("../.filesyncer.json");
-	out << data;
 	return newFiles;
 }
 
-std::vector<std::string> checkChangedFiles() {
-	// checks for any files that have changed based on manifest
-	std::ifstream manifestFile("../.filesyncer.json");
-	json manifest = json::parse(manifestFile);
-	std::vector<std::string> changedFiles;
+void updateHashes() {
+	// update all files in manifest to be new hash
+	std::ifstream manifestFile("../.filesyncer.json", std::ios::binary);
+	try {
+		json manifest = json::parse(manifestFile);
+	}
+	catch (const std::runtime_error& e) {
+		std::cerr << "Manifest file may be corrupted or missing. Manifest file was not updated" << std::endl;
+		manifestFile.close();
+		return;
+	}
+	catch (...) {
+		std::cerr << "Unknown error trying to update manifest. Manifest was not affected." << std::endl;
+		manifestFile.close();
+		return;
+	}
+	manifestFile.close();
+	for (auto& [key, value] : manifest.items()){
+		std::ifstream file(key, std::ios::binary);
+		if (!file.is_open()) {
+			continue;
+		}
+		if (XXH64_hash_t hash = hashFile(file); hash != value) {
+			value = hash;
+		}
+		file.close();
+	}
+	std::ofstream out("../.filesyncer.json", std::ios::binary);
+	out << manifest;
+}
 
-	for (auto& [key, value] : manifest.items())
-	{
-		std::ifstream file(key);
-		if (XXH64_hash_t hash = hashFile(file); hash != hashFile(file)) {
+std::vector<std::string> checkChangedFiles() {
+	// checks for any files that have changed based on manifest.
+	std::ifstream manifestFile("../.filesyncer.json", std::ios::binary);
+	json manifest = json::parse(manifestFile);
+	manifestFile.close();
+	std::vector<std::string> changedFiles;
+	for (auto& [key, value] : manifest.items()){
+		std::ifstream file(key, std::ios::binary);
+		if (XXH64_hash_t hash = hashFile(file); hash != value) {
 			changedFiles.push_back(key);
 		}
 		file.close();

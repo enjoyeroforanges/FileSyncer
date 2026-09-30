@@ -18,6 +18,8 @@ static const char* user =
 
 #endif
 
+#define LOG(x) (std::cerr << x << '\n')
+
 // seperate check since message is a struct
 bool isValidMessage(const Message& msg){
     if (msg.opcode == Opcode::FILE_DELETE && !msg.body.empty()){
@@ -28,7 +30,6 @@ bool isValidMessage(const Message& msg){
     }
     return true;
 }
-
 
 bool is_little_endian(void){
     uint32_t n = 1;
@@ -146,7 +147,7 @@ void appendToFile(const std::vector<char>& buf, const std::string& path){
 }
 
 
-int serializeFile(const std::filesystem::path path, Opcode op){
+std::string serializeFile(const std::filesystem::path path, Opcode op){
     auto mod_time = std::filesystem::last_write_time(path);
     auto sctp = std::chrono::clock_cast<std::chrono::system_clock>(mod_time);
     auto duration = sctp.time_since_epoch();
@@ -160,7 +161,7 @@ int serializeFile(const std::filesystem::path path, Opcode op){
     msg.path = path.string();
     
     std::ifstream file(path, std::ios::in | std::ios::binary);
-    if (!file.is_open()) return -1;
+    if (!file.is_open()) return "";
 
     file.seekg(0, std::ios::end);
     body.resize(file.tellg());
@@ -171,9 +172,8 @@ int serializeFile(const std::filesystem::path path, Opcode op){
     msg.body = body;
 
     tempPath = tempPath /= path.filename();
-    std::cout << tempPath << std::endl;
     writeToFile(serialize(msg), tempPath.string());
-    return 0;
+    return tempPath.string();
 }
 
 
@@ -209,11 +209,14 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
 
         //first check for possible corruption
         fin.read(curr_msg.magic, sizeof(curr_msg.magic));
-        if (std::memcmp(curr_msg.magic, "VVS2", 4) != 0){
-            std::cerr << "Reading possibly corrupt data." << std::endl;
+        if (!fin.eof()) {
+            fin.close();
             break;
         }
-        std::cout << curr_msg.magic << std::endl;
+        if (std::memcmp(curr_msg.magic, "VVS2", 4) != 0){
+            std::cerr << "Reading possibly corrupt data." << std::endl;
+            return std::vector<ReadMessage>{};
+        }
 
         // read total size prefix. uint64_t -> 8 bytes
         length = 8;
@@ -227,14 +230,12 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
         else{
             curr_msg.total_size = total_size;
         }
-
-        std::cout << "total size " << curr_msg.total_size << std::endl;
+        LOG("total size: " << curr_msg.total_size);
         
         // opcode
         Opcode opcode;
         fin.read(reinterpret_cast<char*> (&opcode), 1);
         msg.opcode = opcode;
-        
         // prefix of path length is 4 bytes
         length = 4;
 
@@ -247,11 +248,9 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
         else{
             curr_msg.path_len = path_len;
         }
-
-        std::cout << "path_len " << curr_msg.path_len << std::endl;
+        LOG("path length: " << curr_msg.path_len);
         char* path = new char[curr_msg.path_len];
 
-        
         fin.read(path, curr_msg.path_len);
         msg.path = std::string(path, curr_msg.path_len);
         delete[] path;
@@ -272,7 +271,7 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
         body.resize(curr_msg.body_len);
         fin.read(body.data(), curr_msg.body_len);
         msg.body = body;
-        std::cout << "body_len " << curr_msg.body_len << std::endl;
+        LOG("body_len " << curr_msg.body_len);
 
         // mtime
         int64_t time;
@@ -287,12 +286,32 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
         
         curr_msg.msg = msg;
         data.push_back(curr_msg);
-        if (fin.eof()){
-            std::cout << "finished reading" << std::endl;
-            break;
-        }
     }
     return data;
-
 }
 
+Map parseRawHashes(const ReadMessage& remsg) {
+    Map data;
+    const size_t len = remsg.body_len;
+    if (len % 24 != 0) {
+        // possible corruption or incorrectly read
+        LOG("Error reading bytes");
+        return {};
+    }
+    data.reserve(static_cast<int>(len / 24));
+    uint32_t weak, pos;
+    uint64_t high64, low64;
+
+    for (int i = 0; i < remsg.body_len; i+=24) {
+        // weak hash
+        std::memcpy(&weak, &remsg.msg.body[i], 4);
+        // chunk position
+        std::memcpy(&pos, &remsg.msg.body[i+4], 4);
+        // strong hash low64
+        std::memcpy(&low64, &remsg.msg.body[i+8], 8);
+        // strong hash high64
+        std::memcpy(&high64, &remsg.msg.body[i+16], 8);
+        data.emplace(weak, std::pair<uint64_t, XXH128_hash_t>(pos, XXH128_hash_t(low64, high64)));
+    }
+    return data;
+}
