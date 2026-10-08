@@ -60,6 +60,7 @@ void updateHashes() {
 		manifestFile.close();
 		return;
 	}
+	json manifest = json::parse(manifestFile);
 	manifestFile.close();
 	for (auto& [key, value] : manifest.items()){
 		std::ifstream file(key, std::ios::binary);

@@ -15,6 +15,7 @@
 
 using hashesMap = std::unordered_multimap<uint32_t, std::pair<uint32_t, XXH128_hash_t>>;
 
+#define LOG(x) (std::cerr << x << '\n')
 
 // adler32 hash
 uint32_t adler32(const uint8_t* data, size_t length) {
@@ -150,26 +151,20 @@ std::vector<std::pair<uint32_t, uint32_t>> filterChecksums(const char* oldFile_p
                 XXH3_128bits_update(st, buf.data(),         head);
                 XXH128_hash_t h = XXH3_128bits_digest(st);
                 int timeout = 0;
-                while (val != oldFile_hashes.end() && val->first == weakhash)
-                    {
+                while (val != oldFile_hashes.end() && val->first == weakhash){
                     if (h.high64 == val->second.second.high64 && h.low64 == val->second.second.low64) {
                         replaceRanges.push_back(std::pair<uint32_t, uint32_t> {start, start + count - 1}); // cant use head becausue more than 1 chunk
-                                                                                                       // may be modified
-                        std::cout << "added (" << start << ", " << start + count - 1 << ") to replaceRanges\n";
+                                                                                                                  // may be modified
                         matched = true;
                         break;
                     }
-
                     ++val;
-    
-                    }
+                }
                 XXH3_freeState(st);
                 if (matched) {
                     break;
-                    }
-
+                }
             }
-
         }
     }
     if (!matched) {
@@ -179,14 +174,6 @@ std::vector<std::pair<uint32_t, uint32_t>> filterChecksums(const char* oldFile_p
     }
     newFile.close();
     return replaceRanges;
-
-}
-
-void sendHashes(const std::string path, ssh_session sesh) {
-    // precondition: sesh is already connected and authenticated with host
-    std::fstream file(path);
-    auto hashes = getHashes(file);
-    
 }
 
 

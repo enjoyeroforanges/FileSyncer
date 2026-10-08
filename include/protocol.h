@@ -9,11 +9,12 @@
 #include <string>
 #include <filesystem>
 #include <chrono>
-#include <cstdlib>
+#include <cstdint>
 #include <xxhash.h>
 #include <unordered_map>
 #include <concepts>
 
+#undef FILE_CREATE
 
 using UnixNanos = int64_t;
 
@@ -24,7 +25,7 @@ inline UnixNanos nowUnixNanos() {
 }
 using Map = std::unordered_multimap<uint32_t, std::pair<uint32_t, XXH128_hash_t>>;
 
-enum class Opcode : uint8_t{
+enum struct Opcode : uint8_t{
     FILE_CREATE = 0x01,
     FILE_MODIFY = 0x02,
     FILE_DELETE = 0x03,
@@ -33,7 +34,9 @@ enum class Opcode : uint8_t{
 
 
 // visualization of a message format after serialization. note that big endian is used.
-// [4 bytes: path_len][path_len bytes: path string][4 bytes: body_len][body_len bytes: body string][N bytes: mtime]
+// [4 bytes: magic][4 bytes: total size],
+// [4 bytes: path_len][path_len bytes: path string],
+// [4 bytes: body_len][body_len bytes: body string][8 bytes: mtime]
  
 // note: path should be less than 4096 bytes following unix max path size
 struct Message{
@@ -96,3 +99,4 @@ std::string opcode_to_string(const Opcode opcode);
 
 std::vector<ReadMessage> getRawBytes(const std::string& path);
 
+Message hashesMaptoMessage(Map hashes);

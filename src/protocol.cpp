@@ -20,6 +20,8 @@ static const char* user =
 
 #define LOG(x) (std::cerr << x << '\n')
 
+using hashesMap = std::unordered_multimap<uint32_t, std::pair<uint32_t, XXH128_hash_t>>;
+
 // seperate check since message is a struct
 bool isValidMessage(const Message& msg){
     if (msg.opcode == Opcode::FILE_DELETE && !msg.body.empty()){
@@ -130,6 +132,7 @@ std::vector<char> serialize(const Map &map, const std::string path){
         writeToBuf(buffer, toWireEndian(value.second.high64));
     }
 
+    writeToBuf(buffer, toWireEndian(nowUnixNanos()));
     return buffer;
 }
 
@@ -145,7 +148,6 @@ void appendToFile(const std::vector<char>& buf, const std::string& path){
     fout.write(buf.data(), buf.size());
     fout.close();
 }
-
 
 std::string serializeFile(const std::filesystem::path path, Opcode op){
     auto mod_time = std::filesystem::last_write_time(path);
@@ -222,7 +224,6 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
         length = 8;
         uint64_t total_size = 0;
 
-
         fin.read(reinterpret_cast<char*> (&total_size), length);
         if (is_little_endian()){
             curr_msg.total_size = ByteSwap(total_size);
@@ -290,28 +291,28 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
     return data;
 }
 
-Map parseRawHashes(const ReadMessage& remsg) {
-    Map data;
-    const size_t len = remsg.body_len;
-    if (len % 24 != 0) {
-        // possible corruption or incorrectly read
-        LOG("Error reading bytes");
-        return {};
+// TODO: figure out what to do with this after finishing reading
+Message hashesMaptoMessage(Map hashes) {
+    // order hashes from 0 to n - 1 and memcpy as chars
+    Message msg;
+    msg.opcode = Opcode::FILE_HASHES;
+    std::vector<char> body;
+    // key: 4 bytes, pair.first: 4 bytes, strong hash: 16 bytes
+    body.resize(hashes.size() * 24);
+    int offset = 0;
+    for (uint32_t i = 0; i < hashes.size(); i++) {
+        std::pair val = hashes.find(i)->second;
+        std::memcpy(body.data() + offset, &i, 4);
+        offset += 4;
+        std::memcpy(body.data() + offset, &val.first, 4);
+        offset += 4;
+        std::memcpy(body.data() + offset, &val.second.low64, 8);
+        offset += 8;
+        std::memcpy(body.data() + offset, &val.second.high64, 8);
+        offset += 8;
     }
-    data.reserve(static_cast<int>(len / 24));
-    uint32_t weak, pos;
-    uint64_t high64, low64;
+    msg.body = body;
 
-    for (int i = 0; i < remsg.body_len; i+=24) {
-        // weak hash
-        std::memcpy(&weak, &remsg.msg.body[i], 4);
-        // chunk position
-        std::memcpy(&pos, &remsg.msg.body[i+4], 4);
-        // strong hash low64
-        std::memcpy(&low64, &remsg.msg.body[i+8], 8);
-        // strong hash high64
-        std::memcpy(&high64, &remsg.msg.body[i+16], 8);
-        data.emplace(weak, std::pair<uint64_t, XXH128_hash_t>(pos, XXH128_hash_t(low64, high64)));
-    }
-    return data;
+
+
 }
