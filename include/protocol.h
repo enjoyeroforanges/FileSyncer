@@ -1,11 +1,6 @@
 #pragma once
 #include <vector>
 #include <cstdint>
-#include <fstream>
-#include <iostream>
-#include <cmath>
-#include <bitset>
-#include <cstring>
 #include <string>
 #include <filesystem>
 #include <chrono>
@@ -88,6 +83,14 @@ void writeBytes(std::vector<char>& buf, std::string_view val);
 std::vector<char> serialize(const Message& msg);
 
 std::vector<char> serialize(const Map &map, const std::string path);
+
+// body: repeated [8 bytes: start][8 bytes: end][end - start + 1 bytes: file bytes in that range]
+// ranges are inclusive on both ends, same as filterChecksums output
+// filePath is read locally, remotePath is the absolute path of the file on the receiving end
+std::vector<char> serialize(const std::vector<std::pair<uint32_t, uint32_t>> &ranges, const std::filesystem::path &filePath, const std::string &remotePath);
+
+// writes each range in a FILE_MODIFY body (format above) into msg.path at its offset
+bool applyRanges(const Message& msg);
 
 void writeToFile(const std::vector<char>& buf, const std::string& path);
 

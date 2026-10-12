@@ -123,7 +123,7 @@ std::vector<char> serialize(const Map &map, const std::string path){
     writeToBuf(buffer, toWireEndian(static_cast<uint8_t>(Opcode::FILE_HASHES)));
     writeToBuf(buffer, toWireEndian(static_cast<uint32_t>(path.size())));
     writeToBuf(buffer, path);
-    writeToBuf(buffer, toWireEndian((map.size() * 24)));
+    writeToBuf(buffer, toWireEndian(static_cast<uint32_t>(map.size() * 24)));
 
     for (const auto& [key, value]: map){
         writeToBuf(buffer, toWireEndian(key));
@@ -134,6 +134,74 @@ std::vector<char> serialize(const Map &map, const std::string path){
 
     writeToBuf(buffer, toWireEndian(nowUnixNanos()));
     return buffer;
+}
+
+std::vector<char> serialize(const std::vector<std::pair<uint32_t, uint32_t>> &ranges, const std::filesystem::path &filePath, const std::string &remotePath){
+    // for sending only the changed parts of a file
+    std::ifstream file(filePath, std::ios::in | std::ios::binary);
+    if (!file.is_open()){
+        LOG("couldn't open " << filePath.string() << " for serializing");
+        return {};
+    }
+    uint64_t file_size = std::filesystem::file_size(filePath);
+
+    auto sctp = std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(filePath));
+
+    Message msg;
+    msg.opcode = Opcode::FILE_MODIFY;
+    msg.path = remotePath;
+    msg.mtime = std::chrono::duration_cast<std::chrono::nanoseconds>(sctp.time_since_epoch()).count();
+
+    for (const auto& [start, end] : ranges){
+        if (start > end || end >= file_size){
+            LOG("bad range [" << start << ", " << end << "] for " << filePath.string());
+            return {};
+        }
+        // start and end are both 8 bytes on the wire regardless of platform
+        writeToBuf(msg.body, toWireEndian(static_cast<uint64_t>(start)));
+        writeToBuf(msg.body, toWireEndian(static_cast<uint64_t>(end)));
+
+        size_t len = static_cast<size_t>(end) - start + 1;
+        size_t offset = msg.body.size();
+        msg.body.resize(offset + len);
+        file.seekg(start, std::ios::beg);
+        file.read(msg.body.data() + offset, len);
+        if (file.gcount() != static_cast<std::streamsize>(len)){
+            LOG("failed reading range [" << start << ", " << end << "] from " << filePath.string());
+            return {};
+        }
+    }
+    return serialize(msg);
+}
+
+bool applyRanges(const Message& msg){
+    if (!std::filesystem::exists(msg.path)){
+        // fstream with in|out won't create the file
+        std::ofstream(msg.path, std::ios::binary);
+    }
+    std::fstream file(msg.path, std::ios::in | std::ios::out | std::ios::binary);
+    if (!file.is_open()){
+        LOG("couldn't open " << msg.path << " for modifying");
+        return false;
+    }
+    uint64_t start, end;
+    for (size_t off = 0; off + 16 <= msg.body.size();){
+        std::memcpy(&start, msg.body.data() + off, 8);
+        std::memcpy(&end, msg.body.data() + off + 8, 8);
+        if (is_little_endian()){
+            start = ByteSwap(start);
+            end = ByteSwap(end);
+        }
+        off += 16;
+        if (end < start || end - start + 1 > msg.body.size() - off){
+            LOG("bad range [" << start << ", " << end << "] for " << msg.path);
+            return false;
+        }
+        file.seekp(start);
+        file.write(msg.body.data() + off, end - start + 1);
+        off += end - start + 1;
+    }
+    return file.good();
 }
 
 void writeToFile(const std::vector<char>& buf, const std::string& path){
@@ -291,28 +359,3 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
     return data;
 }
 
-// TODO: figure out what to do with this after finishing reading
-Message hashesMaptoMessage(Map hashes) {
-    // order hashes from 0 to n - 1 and memcpy as chars
-    Message msg;
-    msg.opcode = Opcode::FILE_HASHES;
-    std::vector<char> body;
-    // key: 4 bytes, pair.first: 4 bytes, strong hash: 16 bytes
-    body.resize(hashes.size() * 24);
-    int offset = 0;
-    for (uint32_t i = 0; i < hashes.size(); i++) {
-        std::pair val = hashes.find(i)->second;
-        std::memcpy(body.data() + offset, &i, 4);
-        offset += 4;
-        std::memcpy(body.data() + offset, &val.first, 4);
-        offset += 4;
-        std::memcpy(body.data() + offset, &val.second.low64, 8);
-        offset += 8;
-        std::memcpy(body.data() + offset, &val.second.high64, 8);
-        offset += 8;
-    }
-    msg.body = body;
-
-
-
-}
