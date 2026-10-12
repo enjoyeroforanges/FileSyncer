@@ -47,41 +47,54 @@ ChannelReader::ChannelReader(ssh_channel &chan) {
     opcode = Opcode::FILE_DELETE;
 }
 
+ChannelReader::ChannelReader(FILE* in) {
+    this->in = in;
+    mtime = 0;
+    opcode = Opcode::FILE_DELETE;
+}
+
+size_t ChannelReader::readExact(void* dst, size_t len) {
+    // returns bytes read, less than len only on eof or error
+    if (!chan) {
+        return fread(dst, 1, len, in);
+    }
+    size_t readBytes = 0;
+    while (readBytes < len) {
+        int n = ssh_channel_read(chan, static_cast<char*>(dst) + readBytes, len - readBytes, 0);
+        if (n <= 0) {
+            // eof or server error
+            break;
+        }
+        readBytes += n;
+    }
+    return readBytes;
+}
+
 int ::ChannelReader::readChannelMessage() {
     // return num of bytes read. a error occurred, -1 is returned.
     char magic[4];
     uint64_t totsize;
     uint32_t pathSize;
     uint32_t bodySize;
-    int readBytes = 0;
     bool isLittleEndian = is_little_endian();
-    if (ssh_channel_read(chan, &magic, 4, 0) != 4) {
+    if (readExact(&magic, 4) != 4) {
         return -1;
     }
     if (memcmp(magic, "VVS2", 4) != 0) {
         // reading garbage or not at head of message
         return -1;
     }
-    if (ssh_channel_read(chan, &totsize, 8, 0) != 8) {
+    if (readExact(&totsize, 8) != 8) {
         return -1;
     }
     if (isLittleEndian) {
         totsize = ByteSwap(totsize);
     }
     raw.resize(totsize);
-    int n;
-    while (readBytes < totsize) {
-        n = ssh_channel_read(chan, raw.data() + readBytes, totsize - readBytes, 0);
-        if (n == 0) {
-            // hit eof
-            break;
-        }
-        if (n == -1) {
-            // server error
-            return -1;
-        }
-        readBytes += n;
+    if (readExact(raw.data(), totsize) != totsize) {
+        return -1;
     }
+    int readBytes = totsize;
 
     // sort raw bytes
 
@@ -98,6 +111,10 @@ int ::ChannelReader::readChannelMessage() {
     if (isLittleEndian) {mtime = ByteSwap(mtime);}
 
     return readBytes;
+}
+
+Message ChannelReader::getMessage() const {
+    return Message{opcode, std::string(path.begin(), path.end()), body, static_cast<UnixNanos>(mtime)};
 }
 
 Map ChannelReader::parseRawHashes() {
@@ -340,19 +357,18 @@ ssh_session ConnectToHost(const char* host, const int* port, const char* usernam
     return sesh;
 }
 
-int RunCommand(const char* command, ssh_session sesh) {
+ssh_channel RunCommand(const char* command, ssh_session sesh) {
     int rc;
-    int bytes;
     ssh_channel channel;
 
     channel = ssh_channel_new(sesh);
-    if (channel == NULL) return SSH_ERROR;
+    if (channel == NULL) return channel;
     rc = ssh_channel_open_session(channel);
 
     rc = ssh_channel_request_exec(channel, command);
 
-    if (rc != SSH_OK) return SSH_ERROR;
-    return SSH_OK;
+    if (rc != SSH_OK) {ssh_channel_free(channel); return NULL;}
+    return channel;
 }
 int sftpSendFile(ssh_session sesh, const char* contents, const size_t length, const char* destination) {
     sftp_session sftp = sftp_new(sesh);

@@ -16,16 +16,21 @@
 
 class ChannelReader {
     private:
-        ssh_channel chan;
+        // reads from chan if set, otherwise from in (server reads its stdin)
+        ssh_channel chan = nullptr;
+        FILE* in = nullptr;
         std::vector<char> raw;
         std::vector<char> body;
         std::vector<char> path;
         uint64_t mtime;
         Opcode opcode;
+        size_t readExact(void* dst, size_t len);
     public:
         explicit ChannelReader(ssh_channel &chan);
+        explicit ChannelReader(FILE* in);
         int readChannelMessage();
         Map parseRawHashes();
+        Message getMessage() const;
 };
 
 int verifyKnownHost(ssh_session sesh);
@@ -36,7 +41,7 @@ int authenticatePublicKey(ssh_session sesh);
 
 ssh_session ConnectToHost(const char* host, const int* port, const char* username);
 
-int RunCommand(const char* command, ssh_session sesh);
+ssh_channel RunCommand(const char* command, ssh_session sesh);
 
 int sftpSendFile(ssh_session sesh, const char* contents, const size_t length, const char* destination);
 
