@@ -61,8 +61,14 @@ int checkModifable(const std::string &path, const std::unordered_set<std::string
     return 0;
 }
 
-std::vector<std::pair<uint32_t, uint32_t>> filterChecksums(const char* oldFile_path, const char* newFile_path, const hashesMap &oldFile_hashes, size_t chunk_size){
-    // returnwhich parts to fix replace
+/**
+ * @brief Returns ranges within newFile_path that should be replaced
+ * @param newFile_path The local path to the file that has made changes
+ * @param oldFile_hashes The hashes of the unchanged file
+ * @param chunk_size The size of each chunk
+**/
+std::vector<std::pair<uint32_t, uint32_t>> filterChecksums(const char* newFile_path, const hashesMap &oldFile_hashes, size_t chunk_size){
+    // return which parts to fix replace
     // oldFile_path is path to file on other machine
     // uses rsync algorithm
     std::ifstream newFile;
@@ -176,20 +182,48 @@ std::vector<std::pair<uint32_t, uint32_t>> filterChecksums(const char* oldFile_p
     return replaceRanges;
 }
 
+/**
+ * @brief Calculates the chunk size used for hashing a file of the given size
+ * @param file_size The size of the file in bytes
+ * @return A size_t which represents the size of each chunk. 700 for files up to
+ *         490000 bytes, otherwise the square root of file_size
+ */
+size_t calculateChunkSize(uint64_t file_size) {
+    if (file_size <= 490000){
+        return 700;
+    }
+    return static_cast<size_t>(std::sqrt(file_size));
+}
 
-hashesMap getHashes(std::fstream &file){
-    // precondition: file is a opened file for reading with some stuff in it
+/**
+ *
+ * @param file A fstream object that is opened and not null
+ * @return A size_t which represents the size of each chunk
+ */
+size_t getChunkSize(std::fstream &file) {
     file.seekg(0, std::ios::end);
     std::streamsize file_size = file.tellg();
     file.seekg(0, std::ios::beg);
-    
-    size_t chunk_size;
-    if (std::max<std::streamsize>(file_size, 0) <= 490000){
-        chunk_size = 700;
-    }
-    else{
-        chunk_size = std::sqrt(std::max<std::streamsize>(file_size, 0));
-    }
+
+    return calculateChunkSize(std::max<std::streamsize>(file_size, 0));
+}
+
+/**
+ *
+ * @param file A fstream object that is opened and not null
+ * @return Number of bytes in the file represented by a std::streamsize
+ */
+std::streamsize getFileSize(std::fstream &file) {
+    file.seekg(0, std::ios::end);
+    std::streamsize file_size = file.tellg();
+    file.seekg(0, std::ios::beg);
+    return file_size;
+}
+
+hashesMap getHashes(std::fstream &file){
+    // precondition: file is a opened file for reading with some stuff in it
+    size_t chunk_size = getChunkSize(file);
+    std::streamsize file_size = getFileSize(file);
 
     std::unordered_multimap<uint32_t, std::pair<uint32_t, XXH128_hash_t>> hashes;
 
