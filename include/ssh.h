@@ -43,6 +43,10 @@ ssh_session ConnectToHost(const char* host, const int* port, const char* usernam
 
 ssh_channel RunCommand(const char* command, ssh_session sesh);
 
+int RunCommand(const char* command, ssh_channel &chan);
+
+int writeToStdin(const char* data, const int &len, ssh_channel &chan);
+
 int sftpSendFile(ssh_session sesh, const char* contents, const size_t length, const char* destination);
 
 int sftpSendFile(ssh_session sesh, const char* path, const char* destination);

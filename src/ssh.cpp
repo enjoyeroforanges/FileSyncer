@@ -370,6 +370,22 @@ ssh_channel RunCommand(const char* command, ssh_session sesh) {
     if (rc != SSH_OK) {ssh_channel_free(channel); return NULL;}
     return channel;
 }
+
+int RunCommand(const char* command, ssh_channel &chan) {
+    int rc;
+    rc = ssh_channel_request_exec(chan, command);
+    return rc;
+}
+
+int writeToStdin(const char* data, const int &len, ssh_channel &chan) {
+    if (chan == NULL) return -1;
+    int rc;
+
+    rc = ssh_channel_write(chan, data, len);
+    return rc;
+
+}
+
 int sftpSendFile(ssh_session sesh, const char* contents, const size_t length, const char* destination) {
     sftp_session sftp = sftp_new(sesh);
     int access_type = O_WRONLY | O_CREAT | O_TRUNC;
