@@ -285,9 +285,9 @@ int authenticatePassword(ssh_session sesh, const char* username) {
 
 
 #else
-    termios odt;
-    tcgetattr(STDIN_FILENO, &oldt);
-    termios newt = oldt;
+    termios old;
+    tcgetattr(STDIN_FILENO, &old);
+    termios newt = old;
 
     //disable echoing
     newt.c_lflag &= ~ECHO;
@@ -296,7 +296,7 @@ int authenticatePassword(ssh_session sesh, const char* username) {
     std::getline(std::cin, password);
 
     //enable echoing
-    tcsetattr(STDIN_FILENO, TCSANOW, &oldt);
+    tcsetattr(STDIN_FILENO, TCSANOW, &old);
 
 #endif
 
