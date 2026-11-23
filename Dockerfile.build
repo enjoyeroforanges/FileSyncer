@@ -1,0 +1,14 @@
+# Builder image for compiling FileSyncer for Linux.
+# Toolchain + vcpkg are baked in so they aren't reinstalled on every build.
+# Debian 13 matches debianserver, so the glibc versions line up.
+FROM debian:13
+
+RUN apt-get update && apt-get install -y --no-install-recommends \
+        g++ cmake ninja-build git curl zip unzip tar pkg-config ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN git clone https://github.com/microsoft/vcpkg /opt/vcpkg \
+    && /opt/vcpkg/bootstrap-vcpkg.sh -disableMetrics
+
+ENV VCPKG_ROOT=/opt/vcpkg
+WORKDIR /src

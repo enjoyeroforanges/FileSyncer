@@ -1,19 +1,15 @@
 #pragma once
 #include <vector>
 #include <cstdint>
-#include <fstream>
-#include <iostream>
-#include <cmath>
-#include <bitset>
-#include <cstring>
 #include <string>
 #include <filesystem>
 #include <chrono>
-#include <cstdlib>
+#include <cstdint>
 #include <xxhash.h>
 #include <unordered_map>
 #include <concepts>
 
+#undef FILE_CREATE
 
 using UnixNanos = int64_t;
 
@@ -33,7 +29,9 @@ enum struct Opcode: uint8_t {
 
 
 // visualization of a message format after serialization. note that big endian is used.
-// [4 bytes: path_len][path_len bytes: path string][4 bytes: body_len][body_len bytes: body string][N bytes: mtime]
+// [4 bytes: magic][4 bytes: total size],
+// [4 bytes: path_len][path_len bytes: path string],
+// [4 bytes: body_len][body_len bytes: body string][8 bytes: mtime]
  
 // note: path should be less than 4096 bytes following unix max path size
 struct Message{
@@ -59,11 +57,21 @@ bool is_little_endian(void);
 
 template <typename T>
 
-T ByteSwap(const T &val);
+T ByteSwap(const T &val){
+    T newval = 0;
+    for (size_t x = 0; x < sizeof(val); x++){
+        T byte = (val >> (x * 8)) & 0xFF;
+        newval |= byte << ((sizeof(val) - 1 - x) * 8);
+    }
+    return newval;
+}
+
 
 template <typename T>
-
-T toWireEndian(const T &val);
+// TODO: add require or constraint to prevent byteswap trying to swap nonswappable val
+T toWireEndian(const T &val){
+    return is_little_endian() ? ByteSwap(val) : val;
+}
 
 inline void writeToBuf(std::vector<char>& buf, const std::string_view &val){
     buf.insert(buf.end(), val.begin(), val.end());
@@ -86,6 +94,14 @@ std::vector<char> serialize(const Message& msg);
 
 std::vector<char> serialize(const Map &map, const std::string path);
 
+// body: repeated [8 bytes: start][8 bytes: end][end - start + 1 bytes: file bytes in that range]
+// ranges are inclusive on both ends, same as filterChecksums output
+// filePath is read locally, remotePath is the absolute path of the file on the receiving end
+std::vector<char> serialize(const std::vector<std::pair<uint32_t, uint32_t>> &ranges, const std::filesystem::path &filePath, const std::string &remotePath);
+
+// writes each range in a FILE_MODIFY body (format above) into msg.path at its offset
+bool applyRanges(const Message& msg);
+
 void writeToFile(const std::vector<char>& buf, const std::string& path);
 
 void appendToFile(const std::vector<char>& buf, const std::string& path);
@@ -96,3 +112,4 @@ std::string opcode_to_string(const Opcode opcode);
 
 std::vector<ReadMessage> getRawBytes(const std::string& path);
 
+Message hashesMaptoMessage(Map hashes);

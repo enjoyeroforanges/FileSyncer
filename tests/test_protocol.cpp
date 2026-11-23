@@ -40,18 +40,18 @@ int test_writing(){
 
 }
 
-inline void populateMap(std::unordered_map<uint32_t, std::pair<uint32_t, XXH128_hash_t>>& map, int count){
+inline void populateMap(Map& map, int count){
     for (uint32_t i = 0; i < static_cast<uint32_t>(count); i++){
         std::string data = "test_data_" + std::to_string(i);
         uint32_t size = static_cast<uint32_t>(data.size());
         XXH128_hash_t hash = XXH3_128bits(data.data(), data.size());
-        map[i] = {size, hash};
+        map.insert({i, {size, hash}});
     }
 }
 
 TEST_CASE("test serialize hashes") {
     // make sure that byteswap passes
-    std::unordered_map<uint32_t, std::pair<uint32_t, XXH128_hash_t>> map;
+    Map map;
     auto tmppath = std::filesystem::temp_directory_path();
     populateMap(map, 15);
 
@@ -139,7 +139,6 @@ TEST_CASE("test serialize hashes") {
         CHECK(strong_hash.high64 == map.find(key)->second.second.high64);
     }
 
-    std::cout << "goy7" << std::endl;
 }
 
 int test_byteswap(){

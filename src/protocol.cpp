@@ -18,6 +18,10 @@ static const char* user =
 
 #endif
 
+#define LOG(x) (std::cerr << x << '\n')
+
+using hashesMap = std::unordered_multimap<uint32_t, std::pair<uint32_t, XXH128_hash_t>>;
+
 // seperate check since message is a struct
 bool isValidMessage(const Message& msg){
     if (msg.opcode == Opcode::FILE_DELETE && !msg.body.empty()){
@@ -29,29 +33,10 @@ bool isValidMessage(const Message& msg){
     return true;
 }
 
-
 bool is_little_endian(void){
     uint32_t n = 1;
     unsigned char byte = *reinterpret_cast<unsigned char*> (&n);
     return byte == 1;
-}
-
-template <typename T>
-
-T ByteSwap(const T &val){
-    T newval = 0;
-    for (size_t x = 0; x < sizeof(val); x++){
-        T byte = (val >> (x * 8)) & 0xFF;
-        newval |= byte << ((sizeof(val) - 1 - x) * 8);
-    }
-    return newval;
-}
-
-template <typename T>
-// ---------------------------------------------------------------
-// TODO: add require or constraint to prevent byteswap trying to swap nonswappable val
-T toWireEndian(const T &val){
-    return is_little_endian() ? ByteSwap(val) : val;
 }
 
 
@@ -120,7 +105,7 @@ std::vector<char> serialize(const Map &map, const std::string path){
     writeToBuf(buffer, toWireEndian(static_cast<uint8_t>(Opcode::FILE_HASHES)));
     writeToBuf(buffer, toWireEndian(static_cast<uint32_t>(path.size())));
     writeToBuf(buffer, path);
-    writeToBuf(buffer, toWireEndian((map.size() * 24)));
+    writeToBuf(buffer, toWireEndian(static_cast<uint32_t>(map.size() * 24)));
 
     for (const auto& [key, value]: map){
         writeToBuf(buffer, toWireEndian(key));
@@ -129,7 +114,76 @@ std::vector<char> serialize(const Map &map, const std::string path){
         writeToBuf(buffer, toWireEndian(value.second.high64));
     }
 
+    writeToBuf(buffer, toWireEndian(nowUnixNanos()));
     return buffer;
+}
+
+std::vector<char> serialize(const std::vector<std::pair<uint32_t, uint32_t>> &ranges, const std::filesystem::path &filePath, const std::string &remotePath){
+    // for sending only the changed parts of a file
+    std::ifstream file(filePath, std::ios::in | std::ios::binary);
+    if (!file.is_open()){
+        LOG("couldn't open " << filePath.string() << " for serializing");
+        return {};
+    }
+    uint64_t file_size = std::filesystem::file_size(filePath);
+
+    auto sctp = std::chrono::clock_cast<std::chrono::system_clock>(std::filesystem::last_write_time(filePath));
+
+    Message msg;
+    msg.opcode = Opcode::FILE_MODIFY;
+    msg.path = remotePath;
+    msg.mtime = std::chrono::duration_cast<std::chrono::nanoseconds>(sctp.time_since_epoch()).count();
+
+    for (const auto& [start, end] : ranges){
+        if (start > end || end >= file_size){
+            LOG("bad range [" << start << ", " << end << "] for " << filePath.string());
+            return {};
+        }
+        // start and end are both 8 bytes on the wire regardless of platform
+        writeToBuf(msg.body, toWireEndian(static_cast<uint64_t>(start)));
+        writeToBuf(msg.body, toWireEndian(static_cast<uint64_t>(end)));
+
+        size_t len = static_cast<size_t>(end) - start + 1;
+        size_t offset = msg.body.size();
+        msg.body.resize(offset + len);
+        file.seekg(start, std::ios::beg);
+        file.read(msg.body.data() + offset, len);
+        if (file.gcount() != static_cast<std::streamsize>(len)){
+            LOG("failed reading range [" << start << ", " << end << "] from " << filePath.string());
+            return {};
+        }
+    }
+    return serialize(msg);
+}
+
+bool applyRanges(const Message& msg){
+    if (!std::filesystem::exists(msg.path)){
+        // fstream with in|out won't create the file
+        std::ofstream(msg.path, std::ios::binary);
+    }
+    std::fstream file(msg.path, std::ios::in | std::ios::out | std::ios::binary);
+    if (!file.is_open()){
+        LOG("couldn't open " << msg.path << " for modifying");
+        return false;
+    }
+    uint64_t start, end;
+    for (size_t off = 0; off + 16 <= msg.body.size();){
+        std::memcpy(&start, msg.body.data() + off, 8);
+        std::memcpy(&end, msg.body.data() + off + 8, 8);
+        if (is_little_endian()){
+            start = ByteSwap(start);
+            end = ByteSwap(end);
+        }
+        off += 16;
+        if (end < start || end - start + 1 > msg.body.size() - off){
+            LOG("bad range [" << start << ", " << end << "] for " << msg.path);
+            return false;
+        }
+        file.seekp(start);
+        file.write(msg.body.data() + off, end - start + 1);
+        off += end - start + 1;
+    }
+    return file.good();
 }
 
 void writeToFile(const std::vector<char>& buf, const std::string& path){
@@ -145,8 +199,7 @@ void appendToFile(const std::vector<char>& buf, const std::string& path){
     fout.close();
 }
 
-
-int serializeFile(const std::filesystem::path path, Opcode op){
+std::string serializeFile(const std::filesystem::path path, Opcode op){
     auto mod_time = std::filesystem::last_write_time(path);
     auto sctp = std::chrono::clock_cast<std::chrono::system_clock>(mod_time);
     auto duration = sctp.time_since_epoch();
@@ -160,7 +213,7 @@ int serializeFile(const std::filesystem::path path, Opcode op){
     msg.path = path.string();
     
     std::ifstream file(path, std::ios::in | std::ios::binary);
-    if (!file.is_open()) return -1;
+    if (!file.is_open()) return "";
 
     file.seekg(0, std::ios::end);
     body.resize(file.tellg());
@@ -171,9 +224,8 @@ int serializeFile(const std::filesystem::path path, Opcode op){
     msg.body = body;
 
     tempPath = tempPath /= path.filename();
-    std::cout << tempPath << std::endl;
     writeToFile(serialize(msg), tempPath.string());
-    return 0;
+    return tempPath.string();
 }
 
 
@@ -209,16 +261,18 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
 
         //first check for possible corruption
         fin.read(curr_msg.magic, sizeof(curr_msg.magic));
-        if (std::memcmp(curr_msg.magic, "VVS2", 4) != 0){
-            std::cerr << "Reading possibly corrupt data." << std::endl;
+        if (!fin.eof()) {
+            fin.close();
             break;
         }
-        std::cout << curr_msg.magic << std::endl;
+        if (std::memcmp(curr_msg.magic, "VVS2", 4) != 0){
+            std::cerr << "Reading possibly corrupt data." << std::endl;
+            return std::vector<ReadMessage>{};
+        }
 
         // read total size prefix. uint64_t -> 8 bytes
         length = 8;
         uint64_t total_size = 0;
-
 
         fin.read(reinterpret_cast<char*> (&total_size), length);
         if (is_little_endian()){
@@ -227,14 +281,12 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
         else{
             curr_msg.total_size = total_size;
         }
-
-        std::cout << "total size " << curr_msg.total_size << std::endl;
+        LOG("total size: " << curr_msg.total_size);
         
         // opcode
         Opcode opcode;
         fin.read(reinterpret_cast<char*> (&opcode), 1);
         msg.opcode = opcode;
-        
         // prefix of path length is 4 bytes
         length = 4;
 
@@ -247,11 +299,9 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
         else{
             curr_msg.path_len = path_len;
         }
-
-        std::cout << "path_len " << curr_msg.path_len << std::endl;
+        LOG("path length: " << curr_msg.path_len);
         char* path = new char[curr_msg.path_len];
 
-        
         fin.read(path, curr_msg.path_len);
         msg.path = std::string(path, curr_msg.path_len);
         delete[] path;
@@ -272,7 +322,7 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
         body.resize(curr_msg.body_len);
         fin.read(body.data(), curr_msg.body_len);
         msg.body = body;
-        std::cout << "body_len " << curr_msg.body_len << std::endl;
+        LOG("body_len " << curr_msg.body_len);
 
         // mtime
         int64_t time;
@@ -283,16 +333,11 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
         else{
             msg.mtime = time;
         }
-        
+
         
         curr_msg.msg = msg;
         data.push_back(curr_msg);
-        if (fin.eof()){
-            std::cout << "finished reading" << std::endl;
-            break;
-        }
     }
     return data;
-
 }
 

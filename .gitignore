@@ -80,3 +80,14 @@ compile_commands.json
 
 # Development notes
 notes.md
+
+# fuhgetaboutit
+fuhgetaboutit.cpp
+
+# Local / untracked files
+.vs/
+.mcp.json
+.filesyncer.json
+.filesyncer.txt
+build.sh
+deploy.sh
