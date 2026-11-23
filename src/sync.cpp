@@ -72,7 +72,7 @@ std::vector<std::pair<uint32_t, uint32_t>> filterChecksums(const char* newFile_p
     // oldFile_path is path to file on other machine
     // uses rsync algorithm
     std::ifstream newFile;
-    newFile.open(newFile_path);
+    newFile.open(newFile_path, std::ios::binary);
     // could probably do unordered_set for better performance
     std::vector<std::pair<uint32_t, uint32_t>> replaceRanges; 
     newFile.seekg(0, std::ios::end);
@@ -88,11 +88,16 @@ std::vector<std::pair<uint32_t, uint32_t>> filterChecksums(const char* newFile_p
         matched = false;
 
         newFile.read(buf.data(), chunk_size);
+        // less than chunk_size when the file is smaller than one chunk, or at its tail
+        size_t got = static_cast<size_t>(newFile.gcount());
+        if (got == 0) {
+            return replaceRanges;
+        }
 
-        uint32_t weakhash = adler32(reinterpret_cast<uint8_t*>(buf.data()), chunk_size);
+        uint32_t weakhash = adler32(reinterpret_cast<uint8_t*>(buf.data()), got);
 
         if (oldFile_hashes.find(weakhash) != oldFile_hashes.end()) {
-            auto stronghash = XXH3_128bits(buf.data(), chunk_size);
+            auto stronghash = XXH3_128bits(buf.data(), got);
             auto val = oldFile_hashes.find(weakhash);
             while (val->first == weakhash && val != oldFile_hashes.end()) {
                 if (stronghash.high64 == val->second.second.high64 && stronghash.low64 == val->second.second.low64)
@@ -107,6 +112,11 @@ std::vector<std::pair<uint32_t, uint32_t>> filterChecksums(const char* newFile_p
                 continue;
             }
             // no match, fall to rolling logic
+        }
+        if (got < chunk_size) {
+            // short chunk didn't match and there's nothing left to roll over, send all of it
+            replaceRanges.push_back(std::pair<uint32_t, uint32_t> {length - got, length - 1});
+            return replaceRanges;
         }
         start = static_cast<std::streamoff> (newFile.tellg());
         if (newFile.eof()) {
