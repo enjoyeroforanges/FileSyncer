@@ -39,24 +39,6 @@ bool is_little_endian(void){
     return byte == 1;
 }
 
-template <typename T>
-
-T ByteSwap(const T &val){
-    T newval = 0;
-    for (size_t x = 0; x < sizeof(val); x++){
-        T byte = (val >> (x * 8)) & 0xFF;
-        newval |= byte << ((sizeof(val) - 1 - x) * 8);
-    }
-    return newval;
-}
-
-template <typename T>
-// ---------------------------------------------------------------
-// TODO: add require or constraint to prevent byteswap trying to swap nonswappable val
-T toWireEndian(const T &val){
-    return is_little_endian() ? ByteSwap(val) : val;
-}
-
 
 void writeBytes(std::vector<char>& buf, std::string_view val){
     buf.insert(buf.end(), val.begin(), val.end());
@@ -351,7 +333,7 @@ std::vector<ReadMessage> getRawBytes(const std::string& path){
         else{
             msg.mtime = time;
         }
-        
+
         
         curr_msg.msg = msg;
         data.push_back(curr_msg);
