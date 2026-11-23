@@ -1,0 +1,11 @@
+{
+  "name": "filesyncer",
+  "version-string": "0.1.0",
+  "dependencies": [
+    "libssh",
+    "xxhash",
+    "zlib",
+    "doctest",
+    "nlohmann-json"
+  ]
+}
