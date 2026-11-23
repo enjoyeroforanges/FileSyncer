@@ -59,7 +59,7 @@ XXH64_hash_t hashFile(std::ifstream &file) {
 	return hash;
 }
 
-std::vector<std::string> checkNewFiles(const std::vector<std::string> files){
+std::vector<std::string> checkNewFiles(const std::vector<std::string> &files){
 	// checks if there was any new files added to be watched and adds them to
 	// manifest. a file under an existing root is added to that root's "files",
 	// otherwise a new entry is made with the file's parent directory as root
@@ -316,6 +316,58 @@ static int addFileToManifest(json& manifest, const std::filesystem::path& file) 
 	return 0;
 }
 
+static int removeFileFromManifest(json& manifest, const std::filesystem::path& file) {
+	json* owner = nullptr;
+	std::string rel;
+	for (auto& [root, val] : manifest.items()) {
+		if (isUnder(file, root)) {
+			owner = &val;
+			rel = pathToString(file.lexically_relative(root));
+			break;
+		}
+	}
+	if (!owner) {
+		fprintf(stderr, "%s isn't watched\n", pathToString(file).c_str());
+		return 1;
+	}
+	std::ifstream in(file, std::ios::binary);
+	if (!in.is_open()) {
+		fprintf(stderr, "couldn't open %s. not removed from manifest\n", pathToString(file).c_str());
+		return 1;
+	}
+	(*owner)["files"].erase(rel);
+	return 0;
+}
+
+int rmDir(std::filesystem::path &directory) {
+	std::error_code ec;
+	if (!std::filesystem::is_directory(directory, ec)) {
+		fprintf(stderr, "%s is not a directory. not removed from manifest\n", pathToString(directory).c_str());
+		return 1;
+	}
+	directory = std::filesystem::absolute(directory).lexically_normal();
+	// strip trailing separator so "C:/a/" and "C:/a" give the same key
+	if (!directory.has_filename() && directory != directory.root_path()) {
+		directory = directory.parent_path();
+	}
+	std::string key = pathToString(directory);
+
+	json manifest;
+	if (!loadManifest(manifest)) {
+		fprintf(stderr, "%s was not added\n", key.c_str());
+		return 1;
+	}
+	if (manifest.contains(key)) {
+		manifest.erase(key);
+	}
+
+	if (!saveManifest(manifest)) {
+		fprintf(stderr, "failed to write manifest. %s was not removed\n", key.c_str());
+		return 1;
+	}
+	return 0;
+}
+
 /**
  * Registers directory as a watched directory mirroring remote. Creates the manifest if not present.
  * Calling it again on an already watched directory updates its remote. Refuses directories
@@ -326,7 +378,7 @@ static int addFileToManifest(json& manifest, const std::filesystem::path& file) 
  * if false, only the empty entry is made and files are added later with addFile
  * @return 0 on success, 1 on failure. if some files couldn't be added the rest still are, and 1 is returned
  */
-int addDir(std::filesystem::path directory, std::filesystem::path remote, bool recursive) {
+int addDir(std::filesystem::path &directory, const std::filesystem::path &remote, bool recursive) {
 	std::error_code ec;
 	if (!std::filesystem::is_directory(directory, ec)) {
 		fprintf(stderr, "%s is not a directory. not added to manifest\n", pathToString(directory).c_str());
@@ -386,7 +438,7 @@ int addDir(std::filesystem::path directory, std::filesystem::path remote, bool r
  * @param path The path to the file to be added to the manifest.
  * @return 0 on success (or already tracked), 1 on failure to add to manifest
  */
-int addFile(std::filesystem::path file) {
+int addFile(std::filesystem::path &file) {
 	std::error_code ec;
 	if (!std::filesystem::is_regular_file(file, ec)) {
 		fprintf(stderr, "%s is not a regular file. not added to manifest\n", pathToString(file).c_str());
@@ -404,4 +456,41 @@ int addFile(std::filesystem::path file) {
 		return 1;
 	}
 	return 0;
+}
+
+int removeFile(std::filesystem::path &file) {
+	std::error_code ec;
+	file = std::filesystem::absolute(file).lexically_normal();
+	if (!std::filesystem::exists(file, ec)) {
+		fprintf(stderr, "%s does not exist\n", pathToString(file).c_str());
+		return 1;
+	}
+	json manifest;
+	if (!loadManifest(manifest) || removeFileFromManifest(manifest, file) != 0) {
+		fprintf(stderr, "%s was not removed\n", pathToString(file).c_str());
+		return 1;
+	}
+	if (!saveManifest(manifest)) {
+		fprintf(stderr, "failed to write manifest. %s was not removed\n", pathToString(file).c_str());
+		return 1;
+	}
+	return 0;
+}
+
+int addHandler(std::filesystem::path &path, const std::filesystem::path &remote, bool recursive) {
+	if (std::filesystem::is_directory(path)) {
+		if (remote.empty()) {
+			fprintf(stderr, "a remote directory is required when adding %s\n", pathToString(path).c_str());
+			return 1;
+		}
+		return addDir(path, remote, recursive);
+	}
+	return addFile(path);
+}
+
+int removeHandler(std::filesystem::path &path) {
+	if (std::filesystem::is_directory(path)) {
+		return rmDir(path);
+	}
+	return removeFile(path);
 }

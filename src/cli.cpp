@@ -45,9 +45,21 @@
 //     }
 // }
 
+void CLIArgs::stringToCommand(const std::string &s) {
+    if (s == "gethashes") {
+        command = Command::gethashes;
+    }
+    else if (s == "add") {
+        command = Command::add;
+    }
+    else if (s == "remove") {
+        command = Command::remove;
+    }
+}
+
 std::optional<CLIArgs> parseSync(int argc, char** argv){
-    // example command: filesyncer sync ./ root@localhost -p 2200
-    if (argc < 5){
+    // example command: FileSyncer sync ./ root@localhost -p 2200
+    if (argc < 2){
         return std::nullopt;
     }
     CLIArgs args;
@@ -70,14 +82,29 @@ std::optional<CLIArgs> parseArgs(int argc, char** argv){
 
     const std::string_view command = argv[1];
 
-    if (command == "gethashes"){
+    if (command == "gethashes" || command == "add" || command == "remove"){
+        if (argc < 3){
+            return std::nullopt;
+        }
         CLIArgs args;
-        args.filePath = *argv[2];
-        args.command = Command::gethashes;
+        args.path = argv[2];
+        args.stringToCommand(command.data());
+        if (command == "add") {
+            // -r can go anywhere after the path. the first other argument is the remote
+            for (int i = 3; i < argc; i++) {
+                if (std::string_view(argv[i]) == "-r") args.recursive = true;
+                else if (!args.remote) args.remote = argv[i];
+            }
+        }
         return args;
     }
     else if (command == "sync"){
         return parseSync(argc, argv);
+    }
+    else if (command == "apply"){
+        CLIArgs args;
+        args.command = Command::apply;
+        return args;
     }
     else {
         return std::nullopt;

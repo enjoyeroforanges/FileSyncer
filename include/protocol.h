@@ -57,11 +57,21 @@ bool is_little_endian(void);
 
 template <typename T>
 
-T ByteSwap(const T &val);
+T ByteSwap(const T &val){
+    T newval = 0;
+    for (size_t x = 0; x < sizeof(val); x++){
+        T byte = (val >> (x * 8)) & 0xFF;
+        newval |= byte << ((sizeof(val) - 1 - x) * 8);
+    }
+    return newval;
+}
+
 
 template <typename T>
-
-T toWireEndian(const T &val);
+// TODO: add require or constraint to prevent byteswap trying to swap nonswappable val
+T toWireEndian(const T &val){
+    return is_little_endian() ? ByteSwap(val) : val;
+}
 
 inline void writeToBuf(std::vector<char>& buf, const std::string_view &val){
     buf.insert(buf.end(), val.begin(), val.end());
