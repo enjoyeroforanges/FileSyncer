@@ -20,11 +20,11 @@ inline UnixNanos nowUnixNanos() {
 }
 using Map = std::unordered_multimap<uint32_t, std::pair<uint32_t, XXH128_hash_t>>;
 
-enum struct Opcode : uint8_t{
+enum struct Opcode: uint8_t {
     FILE_CREATE = 0x01,
     FILE_MODIFY = 0x02,
     FILE_DELETE = 0x03,
-    FILE_HASHES = 0x04,   // to distinguish files meant for hash comparisons from modifications
+    FILE_HASHES = 0x04 // to distinguish files meant for hash comparisons from modifications
 };
 
 
